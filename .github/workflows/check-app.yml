@@ -13,6 +13,8 @@ jobs:
           python-version: '3.12'
       - name: Test updates and private serving
         run: python -m unittest discover -s tests -v
+      - name: Test Home Assistant theme synchronization
+        run: node --test tests/test_theme.cjs
       - name: Create public installer test artifact
         id: api_fixture
         uses: actions/upload-artifact@v7
