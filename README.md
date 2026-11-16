@@ -13,7 +13,7 @@ screenshots, built HTML, tokens, or Home Assistant credentials here.
 
 ## Status
 
-Version 0.1.0 is prepared for a one-device pilot. Python behavior is covered by
+Version 0.1.1 is prepared for a one-device pilot. Python behavior is covered by
 automated tests. A Home Assistant Green installation and ARM container build
 still need verification before rollout to other houses.
 
