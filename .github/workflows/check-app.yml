@@ -31,13 +31,29 @@ jobs:
           import hashlib
           import importlib.util
           import io
+          import json
           import os
+          from urllib.error import HTTPError
           import zipfile
 
           spec = importlib.util.spec_from_file_location('app', 'documentation/app.py')
           app = importlib.util.module_from_spec(spec)
           spec.loader.exec_module(app)
           client = app.GitHub(os.environ['TEST_REPOSITORY'], os.environ['TEST_GITHUB_TOKEN'])
+          original_open = client.api_opener.open
+          def diagnostic_open(request, *args, **kwargs):
+              try:
+                  return original_open(request, *args, **kwargs)
+              except HTTPError as error:
+                  if error.code != 302:
+                      print('GitHub API HTTP status:', error.code)
+                      print('Required permissions:', error.headers.get('X-Accepted-GitHub-Permissions', 'not supplied'))
+                      try:
+                          print('GitHub diagnostic:', json.loads(error.read()).get('message', 'No message'))
+                      except ValueError:
+                          pass
+                  raise
+          client.api_opener.open = diagnostic_open
           artifact_id = int(os.environ['TEST_ARTIFACT_ID'])
           data = client.api(f'/actions/artifacts/{artifact_id}/zip', binary=True)
           expected = os.environ['TEST_ARTIFACT_DIGEST'].removeprefix('sha256:')
