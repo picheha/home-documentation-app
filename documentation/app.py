@@ -67,7 +67,7 @@ class GitHub:
                 # It requires GitHub's JSON media type even for ZIP downloads.
                 "Accept": "application/vnd.github+json",
                 "X-GitHub-Api-Version": "2026-03-10",
-                "User-Agent": "home-assistant-documentation/0.1.1",
+                "User-Agent": "home-assistant-documentation/0.1.2",
             },
         )
         try:
@@ -95,7 +95,7 @@ class GitHub:
             if parsed.scheme != "https" or not allowed or parsed.username or parsed.password or parsed.port not in (None, 443):
                 raise UpdateError("GitHub supplied an unexpected package download destination.")
             # Deliberately omit Authorization, even if GitHub redirects back to its own domain.
-            request = Request(location, headers={"User-Agent": "home-assistant-documentation/0.1.1"})
+            request = Request(location, headers={"User-Agent": "home-assistant-documentation/0.1.2"})
             try:
                 with self.download_opener.open(request, timeout=60) as response:
                     return bounded_read(response, MAX_ZIP)
@@ -231,28 +231,57 @@ def handler_for(website):
         def do_GET(self):
             if not self.allowed():
                 return
-            if not self.ready:
-                self.waiting(False)
-                return
             super().do_GET()
 
         def do_HEAD(self):
             if not self.allowed():
                 return
-            if not self.ready:
-                self.waiting(True)
-                return
             super().do_HEAD()
 
-        def waiting(self, head):
-            body = Path(__file__).with_name("waiting.html").read_bytes()
-            self.send_response(503)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
+        def themed_html(self, body, prefix=""):
+            resources = (
+                '<link data-ha-doc-theme rel="stylesheet" href="'
+                + prefix + '__documentation_theme__/theme.css">'
+                '<script src="' + prefix + '__documentation_theme__/theme.js" defer></script>'
+            )
+            html = body.decode("utf-8")
+            if "data-ha-doc-theme" not in html:
+                if re.search(r"</head\s*>", html, flags=re.I):
+                    html = re.sub(r"</head\s*>", lambda match: resources + match.group(), html, count=1, flags=re.I)
+                else:
+                    html = resources + html
+            return html.encode("utf-8")
+
+        def response_file(self, body, content_type, status=200):
+            self.send_response(status)
+            self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(body)))
-            self.send_header("Retry-After", "15")
+            if status == 503:
+                self.send_header("Retry-After", "15")
             self.end_headers()
-            if not head:
-                self.wfile.write(body)
+            return io.BytesIO(body)
+
+        def send_head(self):
+            # Fixed allowlist: never expose other app files or configuration.
+            assets = {
+                "/__documentation_theme__/theme.css": ("theme.css", "text/css; charset=utf-8"),
+                "/__documentation_theme__/theme.js": ("theme.js", "text/javascript; charset=utf-8"),
+            }
+            asset = assets.get(urlsplit(self.path).path)
+            if asset:
+                body = Path(__file__).with_name(asset[0]).read_bytes()
+                return self.response_file(body, asset[1])
+            if not self.ready:
+                body = self.themed_html(Path(__file__).with_name("waiting.html").read_bytes())
+                return self.response_file(body, "text/html; charset=utf-8", 503)
+            candidate = Path(self.translate_path(self.path))
+            if candidate.is_dir() and urlsplit(self.path).path.endswith("/"):
+                candidate = candidate / "index.html"
+            if candidate.is_file() and candidate.suffix.lower() in (".html", ".htm"):
+                depth = len(candidate.parent.relative_to(Path(self.directory)).parts)
+                body = self.themed_html(candidate.read_bytes(), "../" * depth)
+                return self.response_file(body, "text/html; charset=utf-8")
+            return super().send_head()
 
         def list_directory(self, path):
             self.send_error(404)

@@ -21,3 +21,18 @@ approval, and Actions: Read-only permission.
 
 Do not paste a token into any URL or share it with residents. House passwords and
 Home Assistant API tokens are not required.
+
+## Appearance
+
+The documentation uses the surrounding Home Assistant frame's colours and font,
+including custom themes. Theme changes are picked up while the page is open.
+Standalone or isolated frames fall back to the device's light/dark preference.
+Screenshots retain their original colours. No additional permissions are needed.
+
+Use the sun/moon button to switch this documentation between light and dark.
+The selection is remembered in this browser. Select Auto to follow Home Assistant
+again; this does not change the rest of Home Assistant's theme.
+
+The approved PICHE image appears in the app list and on the app information page.
+Home Assistant's sidebar uses its separate book icon; the sidebar panel icon
+setting does not accept a PNG image.
