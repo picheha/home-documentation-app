@@ -8,12 +8,13 @@ Installer repository URL: https://github.com/picheha/home-documentation-app
 
 [Add this app repository to Home Assistant](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fpicheha%2Fhome-documentation-app)
 
-This repository contains application code only. Do not add private articles,
-screenshots, built HTML, tokens, or Home Assistant credentials here.
+This repository contains application code and the approved PICHE app icon/logo.
+Do not add private articles, screenshots, built HTML, tokens, or Home Assistant
+credentials here.
 
 ## Status
 
-Version 0.1.1 is prepared for a one-device pilot. Python behavior is covered by
+Version 0.1.2 is prepared for a one-device pilot. Python behavior is covered by
 automated tests. A Home Assistant Green installation and ARM container build
 still need verification before rollout to other houses.
 
@@ -79,6 +80,21 @@ workflow again. Existing installations continue serving their saved copy.
 For the 60-house rollout, plan durable versioned delivery rather than relying
 on short-lived artifacts alone.
 
+## Appearance
+
+The website follows colours and fonts from the same-origin Home Assistant frame,
+with system light/dark fallback for standalone or isolated frames. It reads only
+an explicit list of CSS presentation variables; it does not inspect Home Assistant
+state, credentials or API connections. Screenshots are not recoloured.
+
+The sun/moon button switches documentation between light and dark and remembers
+the choice in this browser. Auto returns to following Home Assistant.
+
+The approved PICHE brand image is included as `documentation/icon.png` and
+`documentation/logo.png` for the app list and app information page. The sidebar
+continues using a Material Design book icon, which is a separate Home Assistant
+setting.
+
 ## Security and access
 
 Only the Supervisor's internal Ingress address (`172.30.32.2`) may access the
@@ -99,7 +115,7 @@ Run `python -m unittest discover -s tests -v`. The included CI also builds the
 container on an amd64 Linux runner. It does not replace an ARM Green pilot test.
 
 The container uses the official Home Assistant base image and Python standard
-library. No website content is bundled in the installer.
+library. No private documentation content is bundled in the installer.
 
 References: [Home Assistant Ingress](https://contributors.home-assistant.io/apps/guides/ingress/),
 [app configuration](https://contributors.home-assistant.io/apps/reference/configuration/),
