@@ -141,6 +141,10 @@ class GitHubTests(unittest.TestCase):
         class API:
             def open(self, request, timeout):
                 captured.append(request)
+                # Model GitHub's artifact endpoint: an octet-stream API Accept
+                # header produces HTTP 415, rather than the ZIP redirect.
+                if request.get_header("Accept") != "application/vnd.github+json":
+                    raise HTTPError(request.full_url, 415, "Unsupported Media Type", {}, None)
                 raise HTTPError(request.full_url, 302, "Found", {"Location": "https://example.blob.core.windows.net/artifact?signature=test"}, None)
 
         class Storage:
