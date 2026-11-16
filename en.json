@@ -1,0 +1,12 @@
+{
+  "configuration": {
+    "repository": {
+      "name": "Documentation repository",
+      "description": "Your private GitHub repository in owner/repository format."
+    },
+    "github_token": {
+      "name": "GitHub read token",
+      "description": "A fine-grained token for the documentation repository only, with Actions: Read-only. Enter it here, never in a repository URL."
+    }
+  }
+}
