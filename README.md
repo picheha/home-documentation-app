@@ -14,7 +14,7 @@ credentials here.
 
 ## Status
 
-Version 0.1.2 is prepared for a one-device pilot. Python behavior is covered by
+Version 0.1.3 is prepared for a one-device pilot. Python behavior is covered by
 automated tests. A Home Assistant Green installation and ARM container build
 still need verification before rollout to other houses.
 
@@ -51,6 +51,19 @@ and run ID, for example:
 The artifact's GitHub SHA-256 digest is verified before extraction. All website
 links and assets must use relative URLs for Ingress. MkDocs with
 `use_directory_urls: false` is suitable.
+
+## Language selection
+
+The app follows the active Home Assistant user's language by reading the surrounding
+page's language attribute. English is the default. Latvian and Russian pages are
+selected automatically when present at matching `lv/` and `ru/` paths in the private
+website package. Each language should have its own search index and translated
+navigation. Missing languages or pages fall back to English. Isolated frames and
+standalone pages use English. No Home Assistant API permission is required.
+
+The app selects existing translations; it does not generate translations or send
+private documentation to an external service. New articles need translated sources
+in the private repository. Original screenshots and identifiers are preserved.
 
 ## One-time GitHub authorization
 
