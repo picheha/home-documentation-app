@@ -2,6 +2,7 @@ name: Check Documentation app
 on: [push, pull_request, workflow_dispatch]
 permissions:
   contents: read
+  actions: read
 jobs:
   test:
     runs-on: ubuntu-24.04
@@ -12,5 +13,38 @@ jobs:
           python-version: '3.12'
       - name: Test updates and private serving
         run: python -m unittest discover -s tests -v
+      - name: Create public installer test artifact
+        id: api_fixture
+        uses: actions/upload-artifact@v7
+        with:
+          name: installer-api-smoke-test
+          path: documentation/waiting.html
+          retention-days: 1
+      - name: Verify real authenticated GitHub artifact download
+        env:
+          TEST_REPOSITORY: ${{ github.repository }}
+          TEST_GITHUB_TOKEN: ${{ github.token }}
+          TEST_ARTIFACT_ID: ${{ steps.api_fixture.outputs.artifact-id }}
+          TEST_ARTIFACT_DIGEST: ${{ steps.api_fixture.outputs.artifact-digest }}
+        run: |
+          python - <<'PY'
+          import hashlib
+          import importlib.util
+          import io
+          import os
+          import zipfile
+
+          spec = importlib.util.spec_from_file_location('app', 'documentation/app.py')
+          app = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(app)
+          client = app.GitHub(os.environ['TEST_REPOSITORY'], os.environ['TEST_GITHUB_TOKEN'])
+          artifact_id = int(os.environ['TEST_ARTIFACT_ID'])
+          data = client.api(f'/actions/artifacts/{artifact_id}/zip', binary=True)
+          expected = os.environ['TEST_ARTIFACT_DIGEST'].removeprefix('sha256:')
+          assert hashlib.sha256(data).hexdigest() == expected
+          with zipfile.ZipFile(io.BytesIO(data)) as archive:
+              assert 'waiting.html' in archive.namelist()
+          print('Real GitHub artifact API redirect, ZIP download and checksum verified.')
+          PY
       - name: Build app image for this runner
         run: docker build -t documentation-app:test documentation
