@@ -1,0 +1,21 @@
+{
+  "name": "Documentation",
+  "version": "0.1.0",
+  "slug": "documentation",
+  "description": "Private searchable documentation using your Home Assistant login",
+  "url": "https://github.com/picheha/home-documentation-app",
+  "arch": ["aarch64", "amd64"],
+  "startup": "application",
+  "boot": "auto",
+  "init": false,
+  "ingress": true,
+  "ingress_port": 8099,
+  "panel_title": "Documentation",
+  "panel_icon": "mdi:book-open-page-variant",
+  "panel_admin": false,
+  "options": {"repository": "", "github_token": ""},
+  "schema": {
+    "repository": "match(^([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)?$)",
+    "github_token": "password"
+  }
+}
