@@ -3,6 +3,12 @@
   "use strict";
   const root = document.documentElement;
   const storageKey = "piche.documentation.theme";
+  const text = {
+    en: { auto: "Auto", follow: "Follow Home Assistant theme", light: "Switch to light theme", dark: "Switch to dark theme" },
+    lv: { auto: "Automātiski", follow: "Sekot Home Assistant tēmai", light: "Pārslēgties uz gaišo tēmu", dark: "Pārslēgties uz tumšo tēmu" },
+    ru: { auto: "Авто", follow: "Использовать тему Home Assistant", light: "Включить светлую тему", dark: "Включить тёмную тему" }
+  };
+  const labels = text[(root.lang || "en").toLowerCase().split(/[-_]/)[0]] || text.en;
   const variables = {
     "--primary-background-color": "--doc-background",
     "--card-background-color": "--doc-surface",
@@ -87,9 +93,9 @@
     auto = document.createElement("button");
     auto.type = "button";
     auto.className = "doc-theme-auto";
-    auto.textContent = "Auto";
-    auto.title = "Follow Home Assistant theme";
-    auto.setAttribute("aria-label", "Follow Home Assistant theme");
+    auto.textContent = labels.auto;
+    auto.title = labels.follow;
+    auto.setAttribute("aria-label", labels.follow);
     auto.addEventListener("click", () => choose("auto"));
     controls.append(toggle, auto);
     nav.append(controls);
@@ -118,7 +124,7 @@
     if (toggle) {
       const next = mode === "dark" ? "light" : "dark";
       toggle.innerHTML = icons[next];
-      toggle.title = "Switch to " + next + " theme";
+      toggle.title = labels[next];
       toggle.setAttribute("aria-label", toggle.title);
       auto.hidden = preference === "auto";
     }

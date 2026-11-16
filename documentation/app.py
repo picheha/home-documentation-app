@@ -5,6 +5,7 @@ only a validated website directory can be served. No host ports are published.
 """
 
 import hashlib
+import html
 import io
 import json
 import logging
@@ -67,7 +68,7 @@ class GitHub:
                 # It requires GitHub's JSON media type even for ZIP downloads.
                 "Accept": "application/vnd.github+json",
                 "X-GitHub-Api-Version": "2026-03-10",
-                "User-Agent": "home-assistant-documentation/0.1.2",
+                "User-Agent": "home-assistant-documentation/0.1.3",
             },
         )
         try:
@@ -95,7 +96,7 @@ class GitHub:
             if parsed.scheme != "https" or not allowed or parsed.username or parsed.password or parsed.port not in (None, 443):
                 raise UpdateError("GitHub supplied an unexpected package download destination.")
             # Deliberately omit Authorization, even if GitHub redirects back to its own domain.
-            request = Request(location, headers={"User-Agent": "home-assistant-documentation/0.1.2"})
+            request = Request(location, headers={"User-Agent": "home-assistant-documentation/0.1.3"})
             try:
                 with self.download_opener.open(request, timeout=60) as response:
                     return bounded_read(response, MAX_ZIP)
@@ -238,19 +239,33 @@ def handler_for(website):
                 return
             super().do_HEAD()
 
-        def themed_html(self, body, prefix=""):
+        def themed_html(self, body, prefix="", page=None):
+            language = "en"
+            targets = {}
+            if page is not None:
+                relative = page.relative_to(Path(self.directory))
+                if relative.parts[0] in ("lv", "ru"):
+                    language = relative.parts[0]
+                    relative = Path(*relative.parts[1:])
+                for code in ("en", "lv", "ru"):
+                    target = Path(self.directory) / ("" if code == "en" else code) / relative
+                    if target.is_file():
+                        targets[code] = os.path.relpath(target, page.parent).replace(os.sep, "/")
+            language_data = html.escape(json.dumps(targets), quote=True)
             resources = (
                 '<link data-ha-doc-theme rel="stylesheet" href="'
                 + prefix + '__documentation_theme__/theme.css">'
                 '<script src="' + prefix + '__documentation_theme__/theme.js" defer></script>'
+                '<script data-doc-language="' + language + '" data-doc-targets="'
+                + language_data + '" src="' + prefix + '__documentation_theme__/language.js" defer></script>'
             )
-            html = body.decode("utf-8")
-            if "data-ha-doc-theme" not in html:
-                if re.search(r"</head\s*>", html, flags=re.I):
-                    html = re.sub(r"</head\s*>", lambda match: resources + match.group(), html, count=1, flags=re.I)
+            document = body.decode("utf-8")
+            if "data-ha-doc-theme" not in document:
+                if re.search(r"</head\s*>", document, flags=re.I):
+                    document = re.sub(r"</head\s*>", lambda match: resources + match.group(), document, count=1, flags=re.I)
                 else:
-                    html = resources + html
-            return html.encode("utf-8")
+                    document = resources + document
+            return document.encode("utf-8")
 
         def response_file(self, body, content_type, status=200):
             self.send_response(status)
@@ -266,6 +281,7 @@ def handler_for(website):
             assets = {
                 "/__documentation_theme__/theme.css": ("theme.css", "text/css; charset=utf-8"),
                 "/__documentation_theme__/theme.js": ("theme.js", "text/javascript; charset=utf-8"),
+                "/__documentation_theme__/language.js": ("language.js", "text/javascript; charset=utf-8"),
             }
             asset = assets.get(urlsplit(self.path).path)
             if asset:
@@ -279,7 +295,7 @@ def handler_for(website):
                 candidate = candidate / "index.html"
             if candidate.is_file() and candidate.suffix.lower() in (".html", ".htm"):
                 depth = len(candidate.parent.relative_to(Path(self.directory)).parts)
-                body = self.themed_html(candidate.read_bytes(), "../" * depth)
+                body = self.themed_html(candidate.read_bytes(), "../" * depth, candidate)
                 return self.response_file(body, "text/html; charset=utf-8")
             return super().send_head()
 

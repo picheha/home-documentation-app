@@ -1,3 +1,10 @@
+# 0.1.3
+
+- Follow the active user's Home Assistant language: English, Latvian or Russian when the private website contains that translation.
+- Keep readers on the same article when the Home Assistant language changes; use English when a language or page is unavailable.
+- Read only the surrounding page's language attribute, without Home Assistant API access or a translation service.
+- Translate the sun/moon and Auto button labels to match the documentation language.
+
 # 0.1.2
 
 - Use the supplied PICHE brand image as the app icon and information-page logo.

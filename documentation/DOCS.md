@@ -22,6 +22,19 @@ approval, and Actions: Read-only permission.
 Do not paste a token into any URL or share it with residents. House passwords and
 Home Assistant API tokens are not required.
 
+## Language
+
+The app follows the language selected by the current Home Assistant user. English
+is the fallback; Latvian and Russian are selected automatically when their pages
+are included in the private documentation package. Changing language in Home
+Assistant also changes the open documentation article. No additional login,
+translation API, token permission, or per-house language configuration is needed.
+
+Standalone or isolated frames use English. Screenshots and technical identifiers
+retain their original content. Future articles need their own translated source
+files in the private repository; this app selects existing translations and does
+not send private articles to an external translation service.
+
 ## Appearance
 
 The documentation uses the surrounding Home Assistant frame's colours and font,
