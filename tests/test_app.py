@@ -9,7 +9,7 @@ import threading
 import unittest
 from unittest.mock import patch
 from urllib.error import HTTPError
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 import zipfile
 
 MODULE = Path(__file__).resolve().parents[1] / "documentation/app.py"
@@ -224,6 +224,46 @@ class ServerTests(unittest.TestCase):
                 urlopen(self.url + "/../options.json", timeout=3)
             self.assertEqual(error.exception.code, 404)
             error.exception.close()
+
+    def test_theme_assets_are_private_and_served_before_first_download(self):
+        path = "/__documentation_theme__/theme.js"
+        with self.assertRaises(HTTPError) as error:
+            urlopen(self.url + path, timeout=3)
+        self.assertEqual(error.exception.code, 403)
+        error.exception.close()
+        with patch.object(app, "SUPERVISOR_IP", "127.0.0.1"):
+            with urlopen(self.url + path, timeout=3) as response:
+                self.assertIn("javascript", response.headers["Content-Type"])
+                self.assertIn(b"window.frameElement", response.read())
+            with urlopen(self.url + "/__documentation_theme__/theme.css", timeout=3) as response:
+                self.assertIn(b"--doc-background", response.read())
+
+    def test_html_is_themed_and_head_has_same_length_as_get(self):
+        self.website.sync(FakeGitHub(website_zip()))
+        with patch.object(app, "SUPERVISOR_IP", "127.0.0.1"):
+            with urlopen(self.url + "/index.html", timeout=3) as response:
+                data = response.read()
+                self.assertIn(b'data-ha-doc-theme', data)
+                self.assertIn(b'__documentation_theme__/theme.css', data)
+                self.assertIn(b'__documentation_theme__/theme.js', data)
+            with urlopen(Request(self.url + "/index.html", method="HEAD"), timeout=3) as response:
+                self.assertEqual(int(response.headers["Content-Length"]), len(data))
+                self.assertEqual(response.read(), b"")
+
+    def test_nested_html_uses_ingress_safe_relative_theme_paths(self):
+        data = website_zip({"guides/nested/index.html": "<html><head></head><body>Guide</body></html>"})
+        self.website.sync(FakeGitHub(data))
+        with patch.object(app, "SUPERVISOR_IP", "127.0.0.1"):
+            with urlopen(self.url + "/guides/nested/", timeout=3) as response:
+                html = response.read()
+                self.assertIn(b'../../__documentation_theme__/theme.css', html)
+                self.assertIn(b'</script></head>', html)
+
+    def test_screenshot_bytes_remain_unchanged(self):
+        self.website.sync(FakeGitHub(website_zip()))
+        with patch.object(app, "SUPERVISOR_IP", "127.0.0.1"):
+            with urlopen(self.url + "/images/example.png", timeout=3) as response:
+                self.assertEqual(response.read(), b"example image")
 
 
 if __name__ == "__main__":
