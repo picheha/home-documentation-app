@@ -63,9 +63,11 @@ class GitHub:
             "https://api.github.com/repos/" + self.repository + suffix,
             headers={
                 "Authorization": "Bearer " + self.token,
-                "Accept": "application/octet-stream" if binary else "application/vnd.github+json",
+                # The artifact API returns a redirect, not a release-asset body.
+                # It requires GitHub's JSON media type even for ZIP downloads.
+                "Accept": "application/vnd.github+json",
                 "X-GitHub-Api-Version": "2026-03-10",
-                "User-Agent": "home-assistant-documentation/0.1.0",
+                "User-Agent": "home-assistant-documentation/0.1.1",
             },
         )
         try:
@@ -93,7 +95,7 @@ class GitHub:
             if parsed.scheme != "https" or not allowed or parsed.username or parsed.password or parsed.port not in (None, 443):
                 raise UpdateError("GitHub supplied an unexpected package download destination.")
             # Deliberately omit Authorization, even if GitHub redirects back to its own domain.
-            request = Request(location, headers={"User-Agent": "home-assistant-documentation/0.1.0"})
+            request = Request(location, headers={"User-Agent": "home-assistant-documentation/0.1.1"})
             try:
                 with self.download_opener.open(request, timeout=60) as response:
                     return bounded_read(response, MAX_ZIP)
