@@ -5,9 +5,9 @@ const vm = require('node:vm');
 const test = require('node:test');
 const source = fs.readFileSync(path.join(__dirname, '../documentation/theme.js'), 'utf8');
 
-function harness({ embedded = true, inaccessible = false, saved = null } = {}) {
+function harness({ embedded = true, inaccessible = false, saved = null, language = 'en' } = {}) {
   const values = new Map();
-  const root = { dataset: {}, style: {
+  const root = { lang: language, dataset: {}, style: {
     setProperty: (name, value) => values.set(name, value),
     getPropertyValue: name => values.get(name) || '',
     removeProperty: name => values.delete(name),
@@ -102,4 +102,12 @@ test('manual choice survives theme polling; Auto restores Home Assistant', () =>
   assert.equal(state.root.dataset.docThemeMode, 'dark');
   assert.equal(state.storage.has('piche.documentation.theme'), false);
   assert.equal(state.controls[1].hidden, true);
+});
+
+test('theme controls use the article language for Latvian and Russian', () => {
+  for (const [language, expected, autoLabel] of [['lv', 'Pārslēgties uz gaišo tēmu', 'Automātiski'], ['ru', 'Включить светлую тему', 'Авто']]) {
+    const state = harness({ language });
+    assert.equal(state.controls[0].attributes['aria-label'], expected);
+    assert.equal(state.controls[1].textContent, autoLabel);
+  }
 });

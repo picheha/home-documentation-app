@@ -265,6 +265,30 @@ class ServerTests(unittest.TestCase):
             with urlopen(self.url + "/images/example.png", timeout=3) as response:
                 self.assertEqual(response.read(), b"example image")
 
+    def test_language_targets_use_existing_pages_and_ingress_safe_relative_paths(self):
+        data = website_zip({"lv/index.html": "<html><head></head><body>LV</body></html>",
+                            "ru/index.html": "<html><head></head><body>RU</body></html>"})
+        self.website.sync(FakeGitHub(data))
+        with patch.object(app, "SUPERVISOR_IP", "127.0.0.1"):
+            with urlopen(self.url + "/lv/index.html", timeout=3) as response:
+                document = response.read().decode()
+                self.assertIn('data-doc-language="lv"', document)
+                self.assertIn('../__documentation_theme__/language.js', document)
+                import html
+                import re
+                targets = json.loads(html.unescape(re.search(r'data-doc-targets="([^"]+)"', document)[1]))
+                self.assertEqual(targets, {"en": "../index.html", "lv": "index.html", "ru": "../ru/index.html"})
+            with urlopen(self.url + "/__documentation_theme__/language.js", timeout=3) as response:
+                self.assertIn(b"document.documentElement.lang", response.read())
+
+    def test_old_package_offers_only_english_language_target(self):
+        self.website.sync(FakeGitHub(website_zip()))
+        with patch.object(app, "SUPERVISOR_IP", "127.0.0.1"):
+            with urlopen(self.url + "/index.html", timeout=3) as response:
+                document = response.read()
+                self.assertIn(b'&quot;en&quot;: &quot;index.html&quot;', document)
+                self.assertNotIn(b'&quot;lv&quot;', document)
+
 
 if __name__ == "__main__":
     unittest.main()
