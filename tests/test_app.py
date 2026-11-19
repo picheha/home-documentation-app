@@ -4,10 +4,12 @@ import io
 import json
 import os
 from pathlib import Path
+import sys
 import tempfile
 import threading
+from types import ModuleType, SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 import zipfile
@@ -52,6 +54,63 @@ class FakeGitHub:
 
 class Response(io.BytesIO):
     pass
+
+
+class NotificationTests(unittest.TestCase):
+    def test_only_new_build_notices_trigger_download_and_reconnect_catches_up(self):
+        calls = []
+        client = Mock()
+        mqtt = ModuleType("paho.mqtt.client")
+        mqtt.Client = Mock(return_value=client)
+        paho = ModuleType("paho")
+        paho.mqtt = ModuleType("paho.mqtt")
+        paho.mqtt.client = mqtt
+        stop = threading.Event()
+        signals = app.UpdateNotices()
+        topic = app.NOTIFICATION_TOPIC
+
+        def send(payload, destination=topic):
+            client.on_message(client, None, SimpleNamespace(topic=destination, payload=payload))
+
+        # Wait with timeout=0 and drive the worker through actual callback
+        # transitions without a clock delay or MQTT dependency in unit tests.
+        events = iter([
+            lambda: None,  # The startup check was already queued.
+            lambda: (send(b"hello"), send(b"44", "wrong/topic")),
+            lambda: (send(b"42"), send(b"43"), send(b"42"), send(b"43")),
+            lambda: send(b"43"),  # Duplicate and idle time do not fetch.
+            lambda: client.on_subscribe(client, None, 1, [128]),
+            lambda: client.on_subscribe(client, None, 2, [1]),
+            lambda: stop.set(),
+        ])
+        pending = signals.next
+
+        def next_notice(timeout):
+            next(events)()
+            return pending(timeout=0)
+
+        website = Mock()
+        website.sync.side_effect = lambda _github, *, minimum_run_id: calls.append(minimum_run_id)
+        with (
+            patch.dict(sys.modules, {"paho": paho, "paho.mqtt": paho.mqtt, "paho.mqtt.client": mqtt}),
+            patch.object(app, "UpdateNotices", return_value=signals),
+            patch.object(signals, "next", side_effect=next_notice),
+        ):
+            app.notification_loop(website, Mock(), {"mqtt_host": "broker.example", "mqtt_port": 8883}, stop)
+        self.assertEqual(calls, [0, 43, 0])
+        client.tls_set_context.assert_called_once()
+        client.connect_async.assert_called_once_with("broker.example", 8883, keepalive=60)
+        client.disconnect.assert_called_once()
+        client.loop_stop.assert_called_once()
+
+    def test_early_notice_does_not_activate_an_older_build(self):
+        with tempfile.TemporaryDirectory() as folder:
+            website = app.Website(folder)
+            github = FakeGitHub(website_zip())
+            with self.assertRaises(app.UpdateError):
+                website.sync(github, minimum_run_id=43)
+            self.assertIsNone(website.active)
+            self.assertEqual(github.downloads, 0)
 
 
 class UpdaterTests(unittest.TestCase):
