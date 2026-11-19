@@ -1,3 +1,9 @@
+# 0.1.4
+
+- Add optional MQTT notifications to fetch new private documentation after a successful GitHub build.
+- Check GitHub on startup and broker reconnect in notification mode, and keep the saved copy if an update fails.
+- Use the existing automatic hourly schedule when no notification broker is configured.
+
 # 0.1.3
 
 - Follow the active user's Home Assistant language: English, Latvian or Russian when the private website contains that translation.
