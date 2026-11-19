@@ -57,6 +57,54 @@ class Response(io.BytesIO):
 
 
 class NotificationTests(unittest.TestCase):
+    def test_credentials_only_use_local_broker_even_with_saved_remote_defaults(self):
+        defaults = json.loads(MODULE.with_name("config.json").read_text(encoding="utf-8"))["options"]
+        for saved_settings in ({}, {"mqtt_port": 8883, "mqtt_tls": True}):
+            with self.subTest(saved_settings=saved_settings), tempfile.TemporaryDirectory() as folder:
+                options = defaults | {
+                    "repository": "example/docs",
+                    "github_token": "test-token",
+                    "mqtt_username": "documentation",
+                    "mqtt_password": "test-password",
+                } | saved_settings
+                (Path(folder) / "options.json").write_text(json.dumps(options), encoding="utf-8")
+                stop = threading.Event()
+                client = Mock()
+
+                def connect():
+                    client.on_connect(client, None, {}, 0)
+                    stop.set()
+
+                client.loop_start.side_effect = connect
+                mqtt = ModuleType("paho.mqtt.client")
+                mqtt.Client = Mock(return_value=client)
+                paho = ModuleType("paho")
+                paho.mqtt = ModuleType("paho.mqtt")
+                paho.mqtt.client = mqtt
+                with patch.dict(sys.modules, {"paho": paho, "paho.mqtt": paho.mqtt, "paho.mqtt.client": mqtt}):
+                    app.update_loop(app.Website(folder), stop)
+                client.connect_async.assert_called_once_with("core-mosquitto", 1883, keepalive=60)
+                client.username_pw_set.assert_called_once_with("documentation", "test-password")
+                client.tls_set_context.assert_not_called()
+                client.subscribe.assert_called_once_with("piche/documentation/ready", qos=1)
+
+    def test_local_mqtt_without_a_complete_login_keeps_hourly_sync(self):
+        with tempfile.TemporaryDirectory() as folder:
+            options = {"repository": "example/docs", "github_token": "test-token", "mqtt_username": "documentation"}
+            (Path(folder) / "options.json").write_text(json.dumps(options), encoding="utf-8")
+            website = app.Website(folder)
+            stop = threading.Event()
+            with (
+                patch.object(app, "notification_loop") as notify,
+                patch.object(app, "try_sync") as sync,
+                patch.object(stop, "wait", side_effect=lambda _delay: stop.set()) as wait,
+            ):
+                app.update_loop(website, stop)
+            sync.assert_called_once()
+            wait.assert_called_once()
+            self.assertGreaterEqual(wait.call_args.args[0], 3600)
+            notify.assert_not_called()
+
     def test_only_new_build_notices_trigger_download_and_reconnect_catches_up(self):
         calls = []
         client = Mock()
