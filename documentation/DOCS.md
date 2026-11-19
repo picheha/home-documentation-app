@@ -9,8 +9,8 @@ Save, then start the app. Enable Start on boot and Show in sidebar.
 Open Documentation from the sidebar. If a preparation message appears, allow
 the first download to finish and refresh. Residents need no additional login.
 
-The app refreshes documentation on startup and roughly hourly. Restart the app
-to check immediately. The saved documentation remains available during internet
+By default, the app refreshes documentation on startup and roughly hourly.
+The saved documentation remains available during internet
 outages or failed updates. Tokens must be replaced before their expiration to
 keep automatic updates working.
 
@@ -24,14 +24,18 @@ Home Assistant API tokens are not required.
 
 ## Test updates triggered by GitHub
 
-Configure the following in the app's **Configuration** tab. Save and restart
-the app once so it can connect with the new configuration.
+For a Mosquitto broker running on the same Home Assistant, enter the broker's
+**MQTT username** and **MQTT password** in the app's **Configuration** tab.
+The app uses `core-mosquitto`, port `1883`, the internal listener without TLS,
+and topic `piche/documentation/ready`. Save and restart Documentation once.
+
+For a different broker, set the optional advanced connection settings.
 
 | Option | Value |
 | --- | --- |
-| `mqtt_host` | Broker hostname or IPv4 address |
-| `mqtt_port` | 8883 for the default TLS listener, or the port your broker uses |
-| `mqtt_tls` | Keep enabled for the shared broker. Disable only for a trusted local pilot listener that uses plain MQTT. |
+| `mqtt_host` | Broker hostname or IPv4 address. Leave blank for the built-in local connection. |
+| `mqtt_port` | Applies with a custom host. Defaults to `8883`. |
+| `mqtt_tls` | Applies with a custom host. Defaults to enabled. |
 | `mqtt_topic` | Optional. Default is `piche/documentation/ready`. |
 | `mqtt_username`, `mqtt_password` | Subscriber credentials for this topic |
 
@@ -63,10 +67,10 @@ reachable from GitHub Actions and the houses. Set the Actions secrets
 credentials. Set `DOCS_MQTT_TOPIC` and `DOCS_MQTT_PORT` as repository variables
 if you use different values from the defaults.
 
-An empty `mqtt_host` keeps the hourly schedule. With a broker configured, the
-app checks on startup, after reconnecting, or when it receives a new build
-notification. It retries short-lived download failures and keeps the cached
-site if GitHub or the broker is unavailable.
+With no custom host and no MQTT login, the app checks roughly hourly.
+In MQTT mode, it checks on startup, after reconnecting, or when it receives a
+new build notification. It retries short-lived download failures and keeps the
+cached site if GitHub or the broker is unavailable.
 
 ## Language
 

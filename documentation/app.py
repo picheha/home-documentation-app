@@ -30,7 +30,7 @@ ARTIFACT = "documentation-html"
 MAX_ZIP = 64 * 1024 * 1024
 MAX_EXPANDED = 256 * 1024 * 1024
 SUPERVISOR_IP = "172.30.32.2"
-USER_AGENT = "home-assistant-documentation/0.1.4"
+USER_AGENT = "home-assistant-documentation/0.1.5"
 NOTIFICATION_TOPIC = "piche/documentation/ready"
 RETRY_DELAYS = (5, 15, 30, 60)
 
@@ -389,9 +389,15 @@ def notification_loop(website, github, options, stop):
     # Alpine 3.24 ships Paho 1.x. Select the same callback API under Paho 2.x.
     import paho.mqtt.client as mqtt
 
-    host = options["mqtt_host"].strip()
+    host = (options.get("mqtt_host") or "").strip()
+    if host:
+        port = options.get("mqtt_port", 8883)
+        use_tls = options.get("mqtt_tls", True)
+    else:
+        # Older versions saved remote-broker defaults even on installations
+        # with no host configured. Use the same-device listener in that case.
+        host, port, use_tls = "core-mosquitto", 1883, False
     topic = options.get("mqtt_topic") or NOTIFICATION_TOPIC
-    port = options.get("mqtt_port", 8883)
     if not re.fullmatch(r"[A-Za-z0-9.-]+", host) or not re.fullmatch(r"[A-Za-z0-9_/-]{1,128}", topic):
         raise UpdateError("Enter a broker hostname or IPv4 address and a single MQTT topic.")
     client_args = (
@@ -405,7 +411,7 @@ def notification_loop(website, github, options, stop):
         raise UpdateError("Enter the broker username for this MQTT password.")
     if username:
         client.username_pw_set(username, password)
-    if options.get("mqtt_tls", True):
+    if use_tls:
         client.tls_set_context(ssl.create_default_context())
     client.reconnect_delay_set(min_delay=2, max_delay=60)
     notices = UpdateNotices()
@@ -433,7 +439,8 @@ def update_loop(website, stop):
     try:
         options = json.loads((website.data_dir / "options.json").read_text(encoding="utf-8"))
         github = GitHub(options.get("repository", ""), options.get("github_token", ""))
-        if options.get("mqtt_host", "").strip():
+        has_mqtt_login = options.get("mqtt_username") and options.get("mqtt_password")
+        if (options.get("mqtt_host") or "").strip() or has_mqtt_login:
             notification_loop(website, github, options, stop)
             return
     except UpdateError as error:

@@ -1,6 +1,6 @@
 {
   "name": "Documentation",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "slug": "documentation",
   "description": "Private searchable documentation using your Home Assistant login",
   "url": "https://github.com/picheha/home-documentation-app",
@@ -16,15 +16,15 @@
   "options": {
     "repository": "",
     "github_token": "",
-    "mqtt_port": 8883,
-    "mqtt_tls": true
+    "mqtt_username": "",
+    "mqtt_password": ""
   },
   "schema": {
     "repository": "match(^([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)?$)",
     "github_token": "password",
     "mqtt_host": "str?",
-    "mqtt_port": "int(1,65535)",
-    "mqtt_tls": "bool",
+    "mqtt_port": "int(1,65535)?",
+    "mqtt_tls": "bool?",
     "mqtt_topic": "str?",
     "mqtt_username": "str?",
     "mqtt_password": "password?"

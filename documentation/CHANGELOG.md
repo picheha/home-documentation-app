@@ -1,3 +1,8 @@
+# 0.1.5
+
+- Enter only an MQTT username and password to use the Green's local Mosquitto broker. The app supplies the host, port, TLS setting, and default topic.
+- Keep hourly updates when the local MQTT login is blank. Installations with a custom broker host keep their saved connection settings.
+
 # 0.1.4
 
 - Add optional MQTT notifications to fetch new private documentation after a successful GitHub build.
