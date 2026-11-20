@@ -1,3 +1,7 @@
+# 0.1.6
+
+- Show configuration labels, help text, and the preparation screen in English, Latvian, or Russian. English is the fallback.
+
 # 0.1.5
 
 - Enter only an MQTT username and password to use the Green's local Mosquitto broker. The app supplies the host, port, TLS setting, and default topic.

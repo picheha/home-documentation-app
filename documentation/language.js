@@ -7,6 +7,15 @@
   let targets;
   try { targets = JSON.parse(settings.dataset.docTargets || "{}"); }
   catch (_) { return; }
+  const waiting = document.body?.hasAttribute("data-doc-waiting");
+  const waitingText = waiting ? [...document.querySelectorAll("[data-waiting-lv][data-waiting-ru]")]
+    .map((element) => ({
+      element,
+      en: element.textContent,
+      lv: element.dataset.waitingLv,
+      ru: element.dataset.waitingRu,
+    })) : [];
+  let waitingLanguage = current;
   function selectedLanguage() {
     try {
       if (window.parent !== window) {
@@ -19,6 +28,15 @@
   let navigating = false;
   function sync() {
     const selected = selectedLanguage();
+    if (waiting) {
+      const language = selected === "lv" || selected === "ru" ? selected : "en";
+      if (language !== waitingLanguage) {
+        for (const text of waitingText) text.element.textContent = text[language];
+        document.documentElement.lang = language;
+        waitingLanguage = language;
+      }
+      return;
+    }
     const desired = Object.hasOwn(targets, selected) ? selected : "en";
     if (desired === current || !Object.hasOwn(targets, desired) || navigating) return;
     const target = new URL(targets[desired], window.location.href);
