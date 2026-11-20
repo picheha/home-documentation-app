@@ -14,7 +14,7 @@ credentials here.
 
 ## Status
 
-Version 0.1.5 is prepared for a one-device pilot. Python behavior is covered by
+Version 0.1.6 is prepared for a one-device pilot. Python behavior is covered by
 automated tests. A Home Assistant Green installation and ARM container build
 still need verification before rollout to other houses.
 
@@ -53,6 +53,9 @@ links and assets must use relative URLs for Ingress. MkDocs with
 `use_directory_urls: false` is suitable.
 
 ## Language selection
+
+See [language support](LANGUAGES.md) for translated app settings, the preparation
+screen, and how Home Assistant displays the sidebar title.
 
 The app follows the active Home Assistant user's language by reading the surrounding
 page's language attribute. English is the default. Latvian and Russian pages are
