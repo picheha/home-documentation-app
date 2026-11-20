@@ -1,0 +1,36 @@
+{
+  "configuration": {
+    "repository": {
+      "name": "Dokumentācijas repozitorijs",
+      "description": "Jūsu privātais GitHub repozitorijs formātā īpašnieks/repozitorijs."
+    },
+    "github_token": {
+      "name": "GitHub lasīšanas piekļuves marķieris",
+      "description": "Detalizētas piekļuves marķieris ar tiesībām tikai lasīt dokumentācijas repozitorija GitHub Actions datus. Ievadiet to šajā laukā."
+    },
+    "mqtt_username": {
+      "name": "MQTT lietotājvārds",
+      "description": "MQTT brokera konta lietotājvārds dokumentācijas atjauninājumu paziņojumu saņemšanai."
+    },
+    "mqtt_password": {
+      "name": "MQTT parole",
+      "description": "Šī MQTT brokera konta parole."
+    },
+    "mqtt_host": {
+      "name": "MQTT brokera adrese",
+      "description": "Cita brokera resursdatora nosaukums vai IPv4 adrese. Lai ar MQTT lietotājvārdu un paroli izmantotu vietējo Mosquitto brokeri, atstājiet šo lauku tukšu."
+    },
+    "mqtt_port": {
+      "name": "MQTT brokera ports",
+      "description": "Ports savienojumam ar citu brokeri. Noklusējuma vērtība ir 8883."
+    },
+    "mqtt_tls": {
+      "name": "Izmantot TLS MQTT savienojumam",
+      "description": "Šifrē savienojumu ar citu brokeri, izmantojot TLS. Savienojumiem ar citiem brokeriem TLS ir ieslēgts pēc noklusējuma."
+    },
+    "mqtt_topic": {
+      "name": "MQTT atjauninājumu tēma",
+      "description": "Tēma dokumentācijas atjauninājumu paziņojumiem. Noklusējuma vērtība ir piche/documentation/ready."
+    }
+  }
+}

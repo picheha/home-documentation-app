@@ -6,7 +6,31 @@
     },
     "github_token": {
       "name": "GitHub read token",
-      "description": "A fine-grained token for the documentation repository only, with Actions: Read-only. Enter it here, never in a repository URL."
+      "description": "A fine-grained token with read-only Actions access to the documentation repository. Enter it in this field."
+    },
+    "mqtt_username": {
+      "name": "MQTT username",
+      "description": "Username for the MQTT broker account that receives documentation update notifications."
+    },
+    "mqtt_password": {
+      "name": "MQTT password",
+      "description": "Password for that MQTT broker account."
+    },
+    "mqtt_host": {
+      "name": "MQTT broker host",
+      "description": "Hostname or IPv4 address of a custom broker. Leave blank to use the local Mosquitto broker with the MQTT username and password."
+    },
+    "mqtt_port": {
+      "name": "MQTT broker port",
+      "description": "Port for a custom broker. Defaults to 8883."
+    },
+    "mqtt_tls": {
+      "name": "Use TLS for MQTT",
+      "description": "Encrypt the connection to a custom broker with TLS. Enabled by default for custom brokers."
+    },
+    "mqtt_topic": {
+      "name": "MQTT update topic",
+      "description": "Topic for documentation update notifications. Defaults to piche/documentation/ready."
     }
   }
 }
