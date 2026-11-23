@@ -44,7 +44,7 @@ class FakeGitHub:
         self.downloads = 0
         self.artifact = {"id": identifier, "digest": digest or checksum(data), "size_in_bytes": len(data)}
 
-    def latest(self):
+    def latest(self, _active_artifact_id=None):
         return self.artifact, RUN
 
     def api(self, suffix, binary=False):
@@ -88,7 +88,7 @@ class NotificationTests(unittest.TestCase):
                 client.tls_set_context.assert_not_called()
                 client.subscribe.assert_called_once_with("piche/documentation/ready", qos=1)
 
-    def test_local_mqtt_without_a_complete_login_keeps_hourly_sync(self):
+    def test_local_mqtt_without_a_complete_login_checks_every_few_minutes(self):
         with tempfile.TemporaryDirectory() as folder:
             options = {"repository": "example/docs", "github_token": "test-token", "mqtt_username": "documentation"}
             (Path(folder) / "options.json").write_text(json.dumps(options), encoding="utf-8")
@@ -102,10 +102,10 @@ class NotificationTests(unittest.TestCase):
                 app.update_loop(website, stop)
             sync.assert_called_once()
             wait.assert_called_once()
-            self.assertGreaterEqual(wait.call_args.args[0], 3600)
+            self.assertIn(wait.call_args.args[0], range(240, 301))
             notify.assert_not_called()
 
-    def test_only_new_build_notices_trigger_download_and_reconnect_catches_up(self):
+    def test_new_build_notices_and_periodic_checks_both_trigger_sync(self):
         calls = []
         client = Mock()
         mqtt = ModuleType("paho.mqtt.client")
@@ -116,9 +116,14 @@ class NotificationTests(unittest.TestCase):
         stop = threading.Event()
         signals = app.UpdateNotices()
         topic = app.NOTIFICATION_TOPIC
+        now = 0
 
         def send(payload, destination=topic):
             client.on_message(client, None, SimpleNamespace(topic=destination, payload=payload))
+
+        def pass_check_deadline():
+            nonlocal now
+            now += 300
 
         # Wait with timeout=0 and drive the worker through actual callback
         # transitions without a clock delay or MQTT dependency in unit tests.
@@ -129,6 +134,7 @@ class NotificationTests(unittest.TestCase):
             lambda: send(b"43"),  # Duplicate and idle time do not fetch.
             lambda: client.on_subscribe(client, None, 1, [128]),
             lambda: client.on_subscribe(client, None, 2, [1]),
+            pass_check_deadline,
             lambda: stop.set(),
         ])
         pending = signals.next
@@ -143,9 +149,10 @@ class NotificationTests(unittest.TestCase):
             patch.dict(sys.modules, {"paho": paho, "paho.mqtt": paho.mqtt, "paho.mqtt.client": mqtt}),
             patch.object(app, "UpdateNotices", return_value=signals),
             patch.object(signals, "next", side_effect=next_notice),
+            patch.object(app, "monotonic", side_effect=lambda: now),
         ):
             app.notification_loop(website, Mock(), {"mqtt_host": "broker.example", "mqtt_port": 8883}, stop)
-        self.assertEqual(calls, [0, 43, 0])
+        self.assertEqual(calls, [0, 43, 0, 0])
         client.tls_set_context.assert_called_once()
         client.connect_async.assert_called_once_with("broker.example", 8883, keepalive=60)
         client.disconnect.assert_called_once()
@@ -272,14 +279,14 @@ class GitHubTests(unittest.TestCase):
 
     def test_pull_request_build_is_not_trusted(self):
         client = app.GitHub("owner/repository", "test-token")
-        client.api = lambda suffix: {"workflow_runs": [{"head_branch": "main", "status": "completed", "conclusion": "success", "event": "pull_request", "path": ".github/workflows/build-docs.yml", "head_repository": {"full_name": "owner/repository"}}]}
+        client.api = lambda suffix, **kwargs: {"workflow_runs": [{"head_branch": "main", "status": "completed", "conclusion": "success", "event": "pull_request", "path": ".github/workflows/build-docs.yml", "head_repository": {"full_name": "owner/repository"}}]}
         with self.assertRaises(app.UpdateError):
             client.latest()
 
     def test_successful_build_selects_expected_artifact(self):
         client = app.GitHub("owner/repository", "test-token")
         run = dict(RUN, head_branch="main", status="completed", conclusion="success", event="push", path=".github/workflows/build-docs.yml", head_repository={"full_name": "owner/repository"})
-        def api(suffix):
+        def api(suffix, **kwargs):
             if "/workflows/" in suffix:
                 return {"workflow_runs": [run]}
             return {"artifacts": [{"id": 1, "name": "unrelated", "expired": False}, {"id": 2, "name": "documentation-html", "expired": False}]}
@@ -287,6 +294,37 @@ class GitHubTests(unittest.TestCase):
         artifact, selected = client.latest()
         self.assertEqual(artifact["id"], 2)
         self.assertEqual(selected, run)
+
+    def test_unchanged_run_metadata_skips_artifact_lookup_only_after_activation(self):
+        client = app.GitHub("owner/repository", "test-token")
+        run = dict(RUN, head_branch="main", status="completed", conclusion="success", event="push",
+                   path=".github/workflows/build-docs.yml", head_repository={"full_name": "owner/repository"},
+                   run_attempt=1)
+        artifact = {"id": 100, "name": "documentation-html"}
+        artifact_requests = 0
+
+        def open_request(request, timeout):
+            nonlocal artifact_requests
+            if "/workflows/" in request.full_url:
+                etag = f'"attempt-{run["run_attempt"]}"'
+                if request.get_header("If-none-match") == etag:
+                    raise HTTPError(request.full_url, 304, "Not Modified", {}, None)
+                result = Response(json.dumps({"workflow_runs": [run]}).encode())
+                result.headers = {"ETag": etag}
+                return result
+            artifact_requests += 1
+            return Response(json.dumps({"artifacts": [artifact]}).encode())
+
+        client.api_opener = SimpleNamespace(open=open_request)
+        self.assertEqual(client.latest()[0]["id"], 100)
+        self.assertEqual(client.latest()[0]["id"], 100)  # A failed install can retry.
+        self.assertEqual(client.latest("100")[0]["id"], 100)
+        self.assertEqual(artifact_requests, 2)
+
+        run["run_attempt"] = 2
+        artifact["id"] = 101
+        self.assertEqual(client.latest("100")[0]["id"], 101)
+        self.assertEqual(artifact_requests, 3)
 
 
 class ServerTests(unittest.TestCase):
