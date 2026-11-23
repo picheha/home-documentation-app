@@ -9,7 +9,7 @@ Save, then start the app. Enable Start on boot and Show in sidebar.
 Open Documentation from the sidebar. If a preparation message appears, allow
 the first download to finish and refresh. Residents need no additional login.
 
-The app checks GitHub on startup and every four to five minutes. It downloads
+The app checks GitHub on startup and every 15 minutes. It downloads
 the documentation when a new website package is available.
 The saved documentation remains available during internet
 outages or failed updates. Tokens must be replaced before their expiration to

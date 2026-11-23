@@ -1,4 +1,3 @@
-# 0.1.8
+# 0.1.9
 
-- Simplify Configuration to the private GitHub repository and read token.
-- Check for successful builds every four to five minutes and download the documentation when a new package is available.
+- Check GitHub every 15 minutes for new documentation builds.

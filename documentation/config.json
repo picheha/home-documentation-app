@@ -1,6 +1,6 @@
 {
   "name": "Documentation",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "slug": "documentation",
   "description": "Private searchable documentation using your Home Assistant login",
   "url": "https://github.com/picheha/home-documentation-app",

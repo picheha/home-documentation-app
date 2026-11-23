@@ -30,12 +30,8 @@ ARTIFACT = "documentation-html"
 MAX_ZIP = 64 * 1024 * 1024
 MAX_EXPANDED = 256 * 1024 * 1024
 SUPERVISOR_IP = "172.30.32.2"
-USER_AGENT = "home-assistant-documentation/0.1.8"
-
-
-def next_check_delay():
-    # Spread requests from different homes over a minute.
-    return random.randint(240, 300)
+USER_AGENT = "home-assistant-documentation/0.1.9"
+CHECK_INTERVAL_SECONDS = 15 * 60
 
 
 class UpdateError(Exception):
@@ -358,7 +354,7 @@ def handler_for(website):
 
 
 def sync_and_get_delay(website, github):
-    delay = next_check_delay()
+    delay = CHECK_INTERVAL_SECONDS
     try:
         website.sync(github)
     except GitHubRateLimit as error:
