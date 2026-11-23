@@ -14,7 +14,7 @@ credentials here.
 
 ## Status
 
-Version 0.1.7 is prepared for a one-device pilot. Python behavior is covered by
+Version 0.1.8 is prepared for a one-device pilot. Python behavior is covered by
 automated tests. A Home Assistant Green installation and ARM container build
 still need verification before rollout to other houses.
 
@@ -85,10 +85,9 @@ fleet credential lifecycle management.
 
 ## Updates and offline use
 
-The app checks GitHub on startup and every four to five minutes. Optional MQTT
-notifications trigger an immediate check. For the local
-Mosquitto broker, enter only the MQTT username and password. See the
-[notification pilot setup](documentation/DOCS.md#test-updates-triggered-by-github).
+The app checks GitHub on startup and every four to five minutes. It downloads a
+package when a new build succeeds and staggers its checks across installations.
+See [how to test an update](documentation/DOCS.md#test-an-automatic-update).
 New HTML, images, and search files are installed together, without rebuilding the
 app container. A failed download or validation leaves the saved website available.
 Downloaded files survive app restarts. Uninstalling the app can remove its data.
@@ -133,8 +132,7 @@ The app trusts the documentation repository's approved build and HTML content.
 Run `python -m unittest discover -s tests -v`. The included CI also builds the
 container on an amd64 Linux runner. It does not replace an ARM Green pilot test.
 
-The container uses the official Home Assistant base image and Paho for MQTT
-notifications. No private documentation content is bundled in the installer.
+The container uses the official Home Assistant base image. No private documentation content is bundled in the installer.
 
 References: [Home Assistant Ingress](https://contributors.home-assistant.io/apps/guides/ingress/),
 [app configuration](https://contributors.home-assistant.io/apps/reference/configuration/),
