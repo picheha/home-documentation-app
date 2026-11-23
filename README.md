@@ -14,7 +14,7 @@ credentials here.
 
 ## Status
 
-Version 0.1.6 is prepared for a one-device pilot. Python behavior is covered by
+Version 0.1.7 is prepared for a one-device pilot. Python behavior is covered by
 automated tests. A Home Assistant Green installation and ARM container build
 still need verification before rollout to other houses.
 
@@ -85,8 +85,8 @@ fleet credential lifecycle management.
 
 ## Updates and offline use
 
-By default, the app checks on startup and roughly hourly. The optional MQTT
-configuration lets a successful GitHub build trigger a sync. For the local
+The app checks GitHub on startup and every four to five minutes. Optional MQTT
+notifications trigger an immediate check. For the local
 Mosquitto broker, enter only the MQTT username and password. See the
 [notification pilot setup](documentation/DOCS.md#test-updates-triggered-by-github).
 New HTML, images, and search files are installed together, without rebuilding the
