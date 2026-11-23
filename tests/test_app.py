@@ -4,10 +4,9 @@ import io
 import json
 import os
 from pathlib import Path
-import sys
 import tempfile
 import threading
-from types import ModuleType, SimpleNamespace
+from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 from urllib.error import HTTPError
@@ -56,116 +55,43 @@ class Response(io.BytesIO):
     pass
 
 
-class NotificationTests(unittest.TestCase):
-    def test_credentials_only_use_local_broker_even_with_saved_remote_defaults(self):
-        defaults = json.loads(MODULE.with_name("config.json").read_text(encoding="utf-8"))["options"]
-        for saved_settings in ({}, {"mqtt_port": 8883, "mqtt_tls": True}):
-            with self.subTest(saved_settings=saved_settings), tempfile.TemporaryDirectory() as folder:
-                options = defaults | {
-                    "repository": "example/docs",
-                    "github_token": "test-token",
-                    "mqtt_username": "documentation",
-                    "mqtt_password": "test-password",
-                } | saved_settings
+class AutomaticSyncTests(unittest.TestCase):
+    def test_configuration_and_translations_only_offer_github_settings(self):
+        app_dir = MODULE.parent
+        expected = {"repository", "github_token"}
+        config = json.loads((app_dir / "config.json").read_text(encoding="utf-8"))
+        self.assertEqual(set(config["schema"]), expected)
+        self.assertEqual(set(config["options"]), expected)
+        for language in ("en", "lv", "ru"):
+            path = app_dir / "translations" / f"{language}.json"
+            labels = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(set(labels["configuration"]), expected)
+
+    def test_checks_repeat_on_schedule_with_or_without_legacy_options(self):
+        previous_settings = {"mqtt_host": "broker.example", "mqtt_username": "old-user", "mqtt_password": "old-test-password"}
+        for legacy_options in ({}, previous_settings):
+            with self.subTest(legacy_options_present=bool(legacy_options)), tempfile.TemporaryDirectory() as folder:
+                options = {"repository": "example/docs", "github_token": "test-token"} | legacy_options
                 (Path(folder) / "options.json").write_text(json.dumps(options), encoding="utf-8")
+                website = Mock(data_dir=Path(folder))
                 stop = threading.Event()
-                client = Mock()
+                waits = []
 
-                def connect():
-                    client.on_connect(client, None, {}, 0)
-                    stop.set()
+                def wait(delay):
+                    waits.append(delay)
+                    if len(waits) == 2:
+                        stop.set()
 
-                client.loop_start.side_effect = connect
-                mqtt = ModuleType("paho.mqtt.client")
-                mqtt.Client = Mock(return_value=client)
-                paho = ModuleType("paho")
-                paho.mqtt = ModuleType("paho.mqtt")
-                paho.mqtt.client = mqtt
-                with patch.dict(sys.modules, {"paho": paho, "paho.mqtt": paho.mqtt, "paho.mqtt.client": mqtt}):
-                    app.update_loop(app.Website(folder), stop)
-                client.connect_async.assert_called_once_with("core-mosquitto", 1883, keepalive=60)
-                client.username_pw_set.assert_called_once_with("documentation", "test-password")
-                client.tls_set_context.assert_not_called()
-                client.subscribe.assert_called_once_with("piche/documentation/ready", qos=1)
+                with patch.object(stop, "wait", side_effect=wait):
+                    app.update_loop(website, stop)
+                self.assertEqual(website.sync.call_count, 2)
+                self.assertTrue(all(240 <= delay <= 300 for delay in waits))
 
-    def test_local_mqtt_without_a_complete_login_checks_every_few_minutes(self):
-        with tempfile.TemporaryDirectory() as folder:
-            options = {"repository": "example/docs", "github_token": "test-token", "mqtt_username": "documentation"}
-            (Path(folder) / "options.json").write_text(json.dumps(options), encoding="utf-8")
-            website = app.Website(folder)
-            stop = threading.Event()
-            with (
-                patch.object(app, "notification_loop") as notify,
-                patch.object(app, "try_sync") as sync,
-                patch.object(stop, "wait", side_effect=lambda _delay: stop.set()) as wait,
-            ):
-                app.update_loop(website, stop)
-            sync.assert_called_once()
-            wait.assert_called_once()
-            self.assertIn(wait.call_args.args[0], range(240, 301))
-            notify.assert_not_called()
-
-    def test_new_build_notices_and_periodic_checks_both_trigger_sync(self):
-        calls = []
-        client = Mock()
-        mqtt = ModuleType("paho.mqtt.client")
-        mqtt.Client = Mock(return_value=client)
-        paho = ModuleType("paho")
-        paho.mqtt = ModuleType("paho.mqtt")
-        paho.mqtt.client = mqtt
-        stop = threading.Event()
-        signals = app.UpdateNotices()
-        topic = app.NOTIFICATION_TOPIC
-        now = 0
-
-        def send(payload, destination=topic):
-            client.on_message(client, None, SimpleNamespace(topic=destination, payload=payload))
-
-        def pass_check_deadline():
-            nonlocal now
-            now += 300
-
-        # Wait with timeout=0 and drive the worker through actual callback
-        # transitions without a clock delay or MQTT dependency in unit tests.
-        events = iter([
-            lambda: None,  # The startup check was already queued.
-            lambda: (send(b"hello"), send(b"44", "wrong/topic")),
-            lambda: (send(b"42"), send(b"43"), send(b"42"), send(b"43")),
-            lambda: send(b"43"),  # Duplicate and idle time do not fetch.
-            lambda: client.on_subscribe(client, None, 1, [128]),
-            lambda: client.on_subscribe(client, None, 2, [1]),
-            pass_check_deadline,
-            lambda: stop.set(),
-        ])
-        pending = signals.next
-
-        def next_notice(timeout):
-            next(events)()
-            return pending(timeout=0)
-
+    def test_rate_limit_delays_the_next_check(self):
         website = Mock()
-        website.sync.side_effect = lambda _github, *, minimum_run_id: calls.append(minimum_run_id)
-        with (
-            patch.dict(sys.modules, {"paho": paho, "paho.mqtt": paho.mqtt, "paho.mqtt.client": mqtt}),
-            patch.object(app, "UpdateNotices", return_value=signals),
-            patch.object(signals, "next", side_effect=next_notice),
-            patch.object(app, "monotonic", side_effect=lambda: now),
-        ):
-            app.notification_loop(website, Mock(), {"mqtt_host": "broker.example", "mqtt_port": 8883}, stop)
-        self.assertEqual(calls, [0, 43, 0, 0])
-        client.tls_set_context.assert_called_once()
-        client.connect_async.assert_called_once_with("broker.example", 8883, keepalive=60)
-        client.disconnect.assert_called_once()
-        client.loop_stop.assert_called_once()
-
-    def test_early_notice_does_not_activate_an_older_build(self):
-        with tempfile.TemporaryDirectory() as folder:
-            website = app.Website(folder)
-            github = FakeGitHub(website_zip())
-            with self.assertRaises(app.UpdateError):
-                website.sync(github, minimum_run_id=43)
-            self.assertIsNone(website.active)
-            self.assertEqual(github.downloads, 0)
+        website.sync.side_effect = app.GitHubRateLimit(600)
+        with patch.object(app.random, "randint", side_effect=[270, 24]):
+            self.assertEqual(app.sync_and_get_delay(website, Mock()), 624)
 
 
 class UpdaterTests(unittest.TestCase):
@@ -270,6 +196,20 @@ class GitHubTests(unittest.TestCase):
         self.assertEqual(client.api("/actions/artifacts/1/zip", binary=True), b"zip bytes")
         self.assertEqual(captured[0].get_header("Authorization"), "Bearer test-token-secret")
         self.assertIsNone(captured[1].get_header("Authorization"))
+
+    def test_rate_limit_uses_github_retry_after_or_reset(self):
+        cases = [
+            (429, {"Retry-After": "600"}, 600),
+            (403, {"X-RateLimit-Remaining": "0", "X-RateLimit-Reset": "1600"}, 601),
+        ]
+        for code, headers, delay in cases:
+            with self.subTest(code=code):
+                client = app.GitHub("owner/repository", "test-token")
+                client.api_opener = Mock()
+                client.api_opener.open.side_effect = HTTPError("https://api.github.com", code, "Limited", headers, None)
+                with patch.object(app, "time", return_value=1000), self.assertRaises(app.GitHubRateLimit) as limit:
+                    client.api("/actions/runs")
+                self.assertEqual(limit.exception.delay, delay)
 
     def test_unsafe_download_redirects_rejected(self):
         client = app.GitHub("owner/repository", "test-token")
