@@ -14,7 +14,7 @@ credentials here.
 
 ## Status
 
-Version 0.1.8 is prepared for a one-device pilot. Python behavior is covered by
+Version 0.1.9 is prepared for a one-device pilot. Python behavior is covered by
 automated tests. A Home Assistant Green installation and ARM container build
 still need verification before rollout to other houses.
 
@@ -85,8 +85,8 @@ fleet credential lifecycle management.
 
 ## Updates and offline use
 
-The app checks GitHub on startup and every four to five minutes. It downloads a
-package when a new build succeeds and staggers its checks across installations.
+The app checks GitHub on startup and every 15 minutes. It downloads a
+package when it finds a newly successful build.
 See [how to test an update](documentation/DOCS.md#test-an-automatic-update).
 New HTML, images, and search files are installed together, without rebuilding the
 app container. A failed download or validation leaves the saved website available.
