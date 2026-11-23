@@ -1,7 +1,7 @@
 """Ingress-only static documentation, with authenticated GitHub artifact updates.
 
 Options and downloaded content live in /data. Only validated documentation is
-served. The optional MQTT listener connects out to a configured broker.
+served.
 """
 
 import hashlib
@@ -14,11 +14,10 @@ from pathlib import Path, PurePosixPath
 import random
 import re
 import shutil
-import ssl
 import stat
 import tempfile
 import threading
-from time import monotonic
+from time import time
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode, urlsplit
@@ -31,9 +30,7 @@ ARTIFACT = "documentation-html"
 MAX_ZIP = 64 * 1024 * 1024
 MAX_EXPANDED = 256 * 1024 * 1024
 SUPERVISOR_IP = "172.30.32.2"
-USER_AGENT = "home-assistant-documentation/0.1.7"
-NOTIFICATION_TOPIC = "piche/documentation/ready"
-RETRY_DELAYS = (5, 15, 30, 60)
+USER_AGENT = "home-assistant-documentation/0.1.8"
 
 
 def next_check_delay():
@@ -43,6 +40,12 @@ def next_check_delay():
 
 class UpdateError(Exception):
     """A safe-to-log administrative message; never include credentials or URLs."""
+
+
+class GitHubRateLimit(UpdateError):
+    def __init__(self, delay):
+        self.delay = delay
+        super().__init__("GitHub asked the app to pause updates. Keeping the saved website until the next check.")
 
 
 class NoRedirect(HTTPRedirectHandler):
@@ -104,9 +107,17 @@ class GitHub:
                 error.close()
                 return self.download(location)
             code = error.code
+            retry_after = error.headers.get("Retry-After", "")
+            exhausted = error.headers.get("X-RateLimit-Remaining") == "0"
+            reset = error.headers.get("X-RateLimit-Reset", "")
             error.close()
             if code == 304 and cached:
                 return cached[2]
+            if code == 429 or (code == 403 and (retry_after or exhausted)):
+                delay = int(retry_after) if retry_after.isdigit() else 0
+                if exhausted and reset.isdigit():
+                    delay = max(delay, int(reset) + 1 - time())
+                raise GitHubRateLimit(delay) from None
             if code in (401, 403, 404):
                 raise UpdateError("GitHub access denied or repository unavailable. Check repository, token expiry, organization approval, and Actions: Read-only permission.") from None
             if code == 410:
@@ -213,10 +224,8 @@ class Website:
         except (OSError, ValueError, KeyError):
             pass
 
-    def sync(self, github, *, minimum_run_id=0):
+    def sync(self, github):
         artifact, run = github.latest(self.artifact_id)
-        if int(run["id"]) < minimum_run_id:
-            raise UpdateError("The announced build is not visible on GitHub yet. Keeping the saved website.")
         identifier = str(int(artifact["id"]))
         if identifier == self.artifact_id:
             return False
@@ -348,125 +357,18 @@ def handler_for(website):
     return Handler
 
 
-def try_sync(website, github, minimum_run_id=0):
+def sync_and_get_delay(website, github):
+    delay = next_check_delay()
     try:
-        website.sync(github, minimum_run_id=minimum_run_id)
-        return True
+        website.sync(github)
+    except GitHubRateLimit as error:
+        LOG.warning("%s", error)
+        delay = max(delay, error.delay + random.randint(1, 60))
     except UpdateError as error:
         LOG.warning("%s", error)
     except (OSError, ValueError, KeyError, URLError, zipfile.BadZipFile, RuntimeError):
         LOG.warning("Update unavailable. Keeping the saved documentation; check Configuration, internet access, and the latest GitHub build.")
-    return False
-
-
-class UpdateNotices:
-    """Keep the most recent pending run without growing a queue during a download."""
-
-    def __init__(self):
-        self.condition = threading.Condition()
-        self.pending = None
-
-    def request(self, run_id):
-        with self.condition:
-            self.pending = max(self.pending or 0, run_id)
-            self.condition.notify()
-
-    def next(self, timeout):
-        with self.condition:
-            self.condition.wait_for(lambda: self.pending is not None, timeout)
-            run_id, self.pending = self.pending, None
-            return run_id
-
-
-def listen_for_updates(client, topic, notices):
-    """Callbacks only queue notices. Downloads run on the update thread."""
-    last_notice = 0
-
-    def connected(client, _userdata, _flags, result):
-        if result == 0:
-            client.subscribe(topic, qos=1)
-        else:
-            LOG.warning("Documentation notification broker rejected the connection.")
-
-    def subscribed(_client, _userdata, _message_id, granted_qos):
-        if not granted_qos or any(qos >= 128 for qos in granted_qos):
-            LOG.warning("Documentation notification subscription was rejected. Check the broker permissions.")
-            return
-        LOG.info("Document update notifications connected.")
-        notices.request(0)  # Reconcile once after connecting, even without a retained notice.
-
-    def received(_client, _userdata, message):
-        nonlocal last_notice
-        if message.topic != topic or not re.fullmatch(rb"[1-9][0-9]{0,17}", message.payload):
-            return
-        run_id = int(message.payload)
-        if run_id > last_notice:
-            last_notice = run_id
-            notices.request(run_id)
-
-    client.on_connect = connected
-    client.on_connect_fail = lambda _client, _userdata: LOG.warning(
-        "Cannot reach the documentation notification broker. Retrying the connection."
-    )
-    client.on_subscribe = subscribed
-    client.on_message = received
-
-
-def notification_loop(website, github, options, stop):
-    # Alpine 3.24 ships Paho 1.x. Select the same callback API under Paho 2.x.
-    import paho.mqtt.client as mqtt
-
-    host = (options.get("mqtt_host") or "").strip()
-    if host:
-        port = options.get("mqtt_port", 8883)
-        use_tls = options.get("mqtt_tls", True)
-    else:
-        # Older versions saved remote-broker defaults even on installations
-        # with no host configured. Use the same-device listener in that case.
-        host, port, use_tls = "core-mosquitto", 1883, False
-    topic = options.get("mqtt_topic") or NOTIFICATION_TOPIC
-    if not re.fullmatch(r"[A-Za-z0-9.-]+", host) or not re.fullmatch(r"[A-Za-z0-9_/-]{1,128}", topic):
-        raise UpdateError("Enter a broker hostname or IPv4 address and a single MQTT topic.")
-    client_args = (
-        {"callback_api_version": mqtt.CallbackAPIVersion.VERSION1}
-        if hasattr(mqtt, "CallbackAPIVersion") else {}
-    )
-    client = mqtt.Client(**client_args)
-    username = options.get("mqtt_username")
-    password = options.get("mqtt_password")
-    if password and not username:
-        raise UpdateError("Enter the broker username for this MQTT password.")
-    if username:
-        client.username_pw_set(username, password)
-    if use_tls:
-        client.tls_set_context(ssl.create_default_context())
-    client.reconnect_delay_set(min_delay=2, max_delay=60)
-    notices = UpdateNotices()
-    listen_for_updates(client, topic, notices)
-    client.connect_async(host, port, keepalive=60)
-    client.loop_start()
-    try:
-        # Populate an empty cache even if the relay is down during startup.
-        notices.request(0)
-        next_check = monotonic() + next_check_delay()
-        while not stop.is_set():
-            requested_run = notices.next(timeout=1)
-            if stop.is_set():
-                break
-            if requested_run is None:
-                if monotonic() < next_check:
-                    continue
-                try_sync(website, github)
-            else:
-                for delay in (*RETRY_DELAYS, None):
-                    if stop.is_set() or try_sync(website, github, requested_run):
-                        break
-                    if delay is None or stop.wait(delay):
-                        break
-            next_check = monotonic() + next_check_delay()
-    finally:
-        client.disconnect()
-        client.loop_stop()
+    return delay
 
 
 def update_loop(website, stop):
@@ -476,21 +378,11 @@ def update_loop(website, stop):
     except UpdateError as error:
         LOG.warning("%s", error)
         return
-    except (ImportError, OSError, ValueError, TypeError, AttributeError):
+    except (OSError, ValueError, TypeError, AttributeError):
         LOG.warning("Could not start documentation updates. Check the app configuration.")
         return
-    has_mqtt_login = options.get("mqtt_username") and options.get("mqtt_password")
-    if (options.get("mqtt_host") or "").strip() or has_mqtt_login:
-        try:
-            notification_loop(website, github, options, stop)
-            return
-        except UpdateError as error:
-            LOG.warning("%s Automatic GitHub checks are still enabled.", error)
-        except (ImportError, OSError, ValueError, TypeError, AttributeError):
-            LOG.warning("Could not start MQTT notifications. Automatic GitHub checks are still enabled.")
     while not stop.is_set():
-        try_sync(website, github)
-        stop.wait(next_check_delay())
+        stop.wait(sync_and_get_delay(website, github))
 
 
 def main():

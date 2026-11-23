@@ -23,54 +23,13 @@ approval, and Actions: Read-only permission.
 Do not paste a token into any URL or share it with residents. House passwords and
 Home Assistant API tokens are not required.
 
-## Test updates triggered by GitHub
+## Test an automatic update
 
-For a Mosquitto broker running on the same Home Assistant, enter the broker's
-**MQTT username** and **MQTT password** in the app's **Configuration** tab.
-The app uses `core-mosquitto`, port `1883`, the internal listener without TLS,
-and topic `piche/documentation/ready`. Save and restart Documentation once.
+1. In the private repository, wait for **Build private documentation** to finish successfully on `main`.
+2. Open the app's **Log** tab. After the next scheduled check, look for **Documentation updated successfully** with the run ID from GitHub Actions.
+3. Refresh the Documentation page to see the update.
 
-For a different broker, set the optional advanced connection settings.
-
-| Option | Value |
-| --- | --- |
-| `mqtt_host` | Broker hostname or IPv4 address. Leave blank for the built-in local connection. |
-| `mqtt_port` | Applies with a custom host. Defaults to `8883`. |
-| `mqtt_tls` | Applies with a custom host. Defaults to enabled. |
-| `mqtt_topic` | Optional. Default is `piche/documentation/ready`. |
-| `mqtt_username`, `mqtt_password` | Subscriber credentials for this topic |
-
-Give each house subscription access only. Use a separate publisher credential
-for GitHub. The broker message contains only the GitHub Actions build run ID.
-The app downloads and verifies the website using its existing GitHub read token.
-
-**Local pilot test**
-
-1. Point the app at an MQTT broker reachable by the Green. Open the app log and
-   look for **Document update notifications connected**.
-2. Change a test line in the private documentation repository and wait for
-   **Build private documentation** to succeed. The number after `/actions/runs/`
-   in the build's URL is the run ID.
-3. Publish that number as plain text on the configured topic, with QoS 1 and
-   retain enabled. For an existing Home Assistant MQTT integration connected to
-   the same broker, use the **MQTT: Publish** action under Developer Tools.
-4. Confirm the new build appears in the app log. Reload the Documentation page
-   and confirm the edit appears. Repeat with the app disconnected and reconnect
-   it after publishing to test catch-up.
-
-**Automatic test from GitHub**
-
-Copy [the notification workflow example](https://github.com/picheha/home-documentation-app/blob/main/documentation/github-notify.example.yml) into
-`.github/workflows/notify-documentation.yml` in the private documentation
-repository. Set the repository variable `DOCS_MQTT_HOST` to a TLS broker
-reachable from GitHub Actions and the houses. Set the Actions secrets
-`DOCS_MQTT_USERNAME` and `DOCS_MQTT_PASSWORD` to the broker publisher
-credentials. Set `DOCS_MQTT_TOPIC` and `DOCS_MQTT_PORT` as repository variables
-if you use different values from the defaults.
-
-With MQTT configured, the app also checks as soon as the broker reconnects or
-an update notification arrives. The regular GitHub checks continue between
-notifications, including when the broker is unavailable.
+If GitHub asks the app to slow down, it waits before checking again and keeps the saved website available.
 
 ## Language
 
