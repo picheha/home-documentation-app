@@ -85,13 +85,13 @@ class AutomaticSyncTests(unittest.TestCase):
                 with patch.object(stop, "wait", side_effect=wait):
                     app.update_loop(website, stop)
                 self.assertEqual(website.sync.call_count, 2)
-                self.assertTrue(all(240 <= delay <= 300 for delay in waits))
+                self.assertEqual(waits, [900, 900])
 
     def test_rate_limit_delays_the_next_check(self):
         website = Mock()
-        website.sync.side_effect = app.GitHubRateLimit(600)
-        with patch.object(app.random, "randint", side_effect=[270, 24]):
-            self.assertEqual(app.sync_and_get_delay(website, Mock()), 624)
+        website.sync.side_effect = app.GitHubRateLimit(1200)
+        with patch.object(app.random, "randint", return_value=24):
+            self.assertEqual(app.sync_and_get_delay(website, Mock()), 1224)
 
 
 class UpdaterTests(unittest.TestCase):
