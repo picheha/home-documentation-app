@@ -18,6 +18,7 @@ import ssl
 import stat
 import tempfile
 import threading
+from time import monotonic
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode, urlsplit
@@ -30,9 +31,14 @@ ARTIFACT = "documentation-html"
 MAX_ZIP = 64 * 1024 * 1024
 MAX_EXPANDED = 256 * 1024 * 1024
 SUPERVISOR_IP = "172.30.32.2"
-USER_AGENT = "home-assistant-documentation/0.1.5"
+USER_AGENT = "home-assistant-documentation/0.1.7"
 NOTIFICATION_TOPIC = "piche/documentation/ready"
 RETRY_DELAYS = (5, 15, 30, 60)
+
+
+def next_check_delay():
+    # Spread requests from different homes over a minute.
+    return random.randint(240, 300)
 
 
 class UpdateError(Exception):
@@ -62,8 +68,10 @@ class GitHub:
         # Redirects are handled explicitly so Authorization never reaches storage/CDN hosts.
         self.api_opener = build_opener(NoRedirect())
         self.download_opener = build_opener(NoRedirect())
+        self.cached_workflow = None
+        self.latest_package = None
 
-    def api(self, suffix, binary=False):
+    def api(self, suffix, binary=False, *, cache_workflow=False):
         request = Request(
             "https://api.github.com/repos/" + self.repository + suffix,
             headers={
@@ -75,10 +83,21 @@ class GitHub:
                 "User-Agent": USER_AGENT,
             },
         )
+        cached = self.cached_workflow if cache_workflow else None
+        if cached and cached[0] == suffix:
+            request.add_header("If-None-Match", cached[1])
+        else:
+            cached = None
         try:
             with self.api_opener.open(request, timeout=45) as response:
                 data = bounded_read(response, MAX_ZIP if binary else 4 * 1024 * 1024)
-                return data if binary else json.loads(data)
+                if binary:
+                    return data
+                result = json.loads(data)
+                if cache_workflow:
+                    etag = response.headers.get("ETag")
+                    self.cached_workflow = (suffix, etag, result) if etag else None
+                return result
         except HTTPError as error:
             if binary and error.code == 302:
                 location = error.headers.get("Location", "")
@@ -86,6 +105,8 @@ class GitHub:
                 return self.download(location)
             code = error.code
             error.close()
+            if code == 304 and cached:
+                return cached[2]
             if code in (401, 403, 404):
                 raise UpdateError("GitHub access denied or repository unavailable. Check repository, token expiry, organization approval, and Actions: Read-only permission.") from None
             if code == 410:
@@ -113,9 +134,9 @@ class GitHub:
                 raise UpdateError("Package download failed; keeping the saved website.") from None
         raise UpdateError("Too many package download redirects.")
 
-    def latest(self):
+    def latest(self, active_artifact_id=None):
         query = urlencode({"branch": "main", "status": "success", "per_page": 1})
-        result = self.api(f"/actions/workflows/{quote(WORKFLOW, safe='')}/runs?{query}")
+        result = self.api(f"/actions/workflows/{quote(WORKFLOW, safe='')}/runs?{query}", cache_workflow=True)
         runs = result.get("workflow_runs", [])
         if not runs:
             raise UpdateError("No successful documentation build found on main. Run Build private documentation in GitHub Actions.")
@@ -127,11 +148,17 @@ class GitHub:
                 or run.get("path") != ".github/workflows/" + WORKFLOW):
             raise UpdateError("Build does not match the trusted documentation workflow.")
         run_id = int(run["id"])
+        build = (run_id, run.get("run_attempt"), run["head_sha"])
+        if self.latest_package and self.latest_package[0] == build:
+            last_artifact = self.latest_package[1]
+            if str(last_artifact["id"]) == active_artifact_id:
+                return last_artifact, run
         result = self.api(f"/actions/runs/{run_id}/artifacts?per_page=100")
         artifacts = [a for a in result.get("artifacts", []) if a.get("name") == ARTIFACT and not a.get("expired")]
         if not artifacts:
             raise UpdateError("Website package is missing or expired. Run Build private documentation again in GitHub Actions.")
         artifact = max(artifacts, key=lambda a: int(a["id"]))
+        self.latest_package = build, artifact
         return artifact, run
 
 
@@ -187,7 +214,7 @@ class Website:
             pass
 
     def sync(self, github, *, minimum_run_id=0):
-        artifact, run = github.latest()
+        artifact, run = github.latest(self.artifact_id)
         if int(run["id"]) < minimum_run_id:
             raise UpdateError("The announced build is not visible on GitHub yet. Keeping the saved website.")
         identifier = str(int(artifact["id"]))
@@ -421,15 +448,22 @@ def notification_loop(website, github, options, stop):
     try:
         # Populate an empty cache even if the relay is down during startup.
         notices.request(0)
+        next_check = monotonic() + next_check_delay()
         while not stop.is_set():
             requested_run = notices.next(timeout=1)
+            if stop.is_set():
+                break
             if requested_run is None:
-                continue
-            for delay in (*RETRY_DELAYS, None):
-                if stop.is_set() or try_sync(website, github, requested_run):
-                    break
-                if delay is None or stop.wait(delay):
-                    break
+                if monotonic() < next_check:
+                    continue
+                try_sync(website, github)
+            else:
+                for delay in (*RETRY_DELAYS, None):
+                    if stop.is_set() or try_sync(website, github, requested_run):
+                        break
+                    if delay is None or stop.wait(delay):
+                        break
+            next_check = monotonic() + next_check_delay()
     finally:
         client.disconnect()
         client.loop_stop()
@@ -439,19 +473,24 @@ def update_loop(website, stop):
     try:
         options = json.loads((website.data_dir / "options.json").read_text(encoding="utf-8"))
         github = GitHub(options.get("repository", ""), options.get("github_token", ""))
-        has_mqtt_login = options.get("mqtt_username") and options.get("mqtt_password")
-        if (options.get("mqtt_host") or "").strip() or has_mqtt_login:
-            notification_loop(website, github, options, stop)
-            return
     except UpdateError as error:
         LOG.warning("%s", error)
         return
     except (ImportError, OSError, ValueError, TypeError, AttributeError):
         LOG.warning("Could not start documentation updates. Check the app configuration.")
         return
+    has_mqtt_login = options.get("mqtt_username") and options.get("mqtt_password")
+    if (options.get("mqtt_host") or "").strip() or has_mqtt_login:
+        try:
+            notification_loop(website, github, options, stop)
+            return
+        except UpdateError as error:
+            LOG.warning("%s Automatic GitHub checks are still enabled.", error)
+        except (ImportError, OSError, ValueError, TypeError, AttributeError):
+            LOG.warning("Could not start MQTT notifications. Automatic GitHub checks are still enabled.")
     while not stop.is_set():
         try_sync(website, github)
-        stop.wait(3600 + random.randint(0, 120))
+        stop.wait(next_check_delay())
 
 
 def main():

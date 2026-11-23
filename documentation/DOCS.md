@@ -9,14 +9,15 @@ Save, then start the app. Enable Start on boot and Show in sidebar.
 Open Documentation from the sidebar. If a preparation message appears, allow
 the first download to finish and refresh. Residents need no additional login.
 
-By default, the app refreshes documentation on startup and roughly hourly.
+The app checks GitHub on startup and every four to five minutes. It downloads
+the documentation when a new website package is available.
 The saved documentation remains available during internet
 outages or failed updates. Tokens must be replaced before their expiration to
 keep automatic updates working.
 
 If the logs report that the website package expired, run the documentation
-repository's Build private documentation workflow in GitHub Actions, then restart
-this app. For access errors, check repository spelling, token expiry, organization
+repository's Build private documentation workflow in GitHub Actions and allow
+the app to pick it up. For access errors, check repository spelling, token expiry, organization
 approval, and Actions: Read-only permission.
 
 Do not paste a token into any URL or share it with residents. House passwords and
@@ -67,10 +68,9 @@ reachable from GitHub Actions and the houses. Set the Actions secrets
 credentials. Set `DOCS_MQTT_TOPIC` and `DOCS_MQTT_PORT` as repository variables
 if you use different values from the defaults.
 
-With no custom host and no MQTT login, the app checks roughly hourly.
-In MQTT mode, it checks on startup, after reconnecting, or when it receives a
-new build notification. It retries short-lived download failures and keeps the
-cached site if GitHub or the broker is unavailable.
+With MQTT configured, the app also checks as soon as the broker reconnects or
+an update notification arrives. The regular GitHub checks continue between
+notifications, including when the broker is unavailable.
 
 ## Language
 

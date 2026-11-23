@@ -1,3 +1,8 @@
+# 0.1.7
+
+- Check GitHub every four to five minutes for new documentation in all configurations. MQTT notices still trigger an immediate check when configured.
+- Reuse an unchanged build response and download the package only when a new version is available.
+
 # 0.1.6
 
 - Show configuration labels, help text, and the preparation screen in English, Latvian, or Russian. English is the fallback.
