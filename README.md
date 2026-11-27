@@ -14,7 +14,7 @@ credentials here.
 
 ## Status
 
-Version 0.1.9 is prepared for a one-device pilot. Python behavior is covered by
+Version 0.1.10 is prepared for a one-device pilot. Python behavior is covered by
 automated tests. A Home Assistant Green installation and ARM container build
 still need verification before rollout to other houses.
 
@@ -116,8 +116,9 @@ setting.
 ## Security and access
 
 Only the Supervisor's internal Ingress address (`172.30.32.2`) may access the
-web server. There is no exposed host port, privileged mode, host folder mapping,
-or Home Assistant API permission. All signed-in Home Assistant users can see the
+web server. The sidebar installer has write access to the Home Assistant
+configuration folder. The app does not expose a host port or require privileged
+mode or Home Assistant API permission. All signed-in Home Assistant users can see the
 panel (`panel_admin: false`); it is not per-document or per-house authorization.
 The published material should be appropriate for every user on that installation.
 
@@ -129,7 +130,8 @@ The app trusts the documentation repository's approved build and HTML content.
 
 ## Development
 
-Run `python -m unittest discover -s tests -v`. The included CI also builds the
+Install `ruamel.yaml==0.19.1` and run `python -m unittest discover -s tests -v`.
+The included CI also builds the
 container on an amd64 Linux runner. It does not replace an ARM Green pilot test.
 
 The container uses the official Home Assistant base image. No private documentation content is bundled in the installer.
