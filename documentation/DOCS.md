@@ -44,6 +44,19 @@ retain their original content. Future articles need their own translated source
 files in the private repository; this app selects existing translations and does
 not send private articles to an external translation service.
 
+### Sidebar label
+
+From version 0.1.10, the app installs a local frontend module to translate the
+Documentation entry in the Home Assistant sidebar. The installer uses write
+access to Home Assistant's configuration to register the module.
+Select Update in the app's Info tab to install 0.1.10.
+The installer backs up the YAML it edits. The label takes effect after the
+next Home Assistant Core restart, without an extra preference for residents.
+
+Check the app log for the installation result. If the app reports that the
+YAML needs manual review, it keeps serving the guides with the existing sidebar
+label.
+
 ## Appearance
 
 The documentation uses the surrounding Home Assistant frame's colours and font,

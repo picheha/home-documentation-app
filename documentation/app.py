@@ -382,8 +382,11 @@ def update_loop(website, stop):
 
 
 def main():
+    from sidebar_install import setup_sidebar
+
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     website = Website("/data")
+    setup_sidebar(website.data_dir, LOG)
     stop = threading.Event()
     threading.Thread(target=update_loop, args=(website, stop), daemon=True).start()
     server = ThreadingHTTPServer(("0.0.0.0", 8099), handler_for(website))
